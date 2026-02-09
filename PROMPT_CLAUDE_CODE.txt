@@ -1,0 +1,625 @@
+PROMPT PARA CLAUDE CODE - DASHBOARD DE CONVERSÃO LEGAL É VIVER
+
+Crie um sistema completo de Dashboard de Conversão para leads em etapa "Assinatura".
+
+═══════════════════════════════════════════════════════════════
+
+STACK TECNOLÓGICO:
+
+Backend:
+- Node.js 18+ com TypeScript
+- Express.js (API REST)
+- MongoDB (database)
+- Redis (cache e filas)
+- BullMQ (processamento assíncrono)
+- Winston (logging)
+- Joi (validação)
+- Axios (HTTP client)
+
+Frontend:
+- React 18+ com TypeScript
+- Vite (build tool)
+- TailwindCSS (estilização)
+- React Query (state management)
+- Recharts (gráficos)
+- React Router (navegação)
+- date-fns (manipulação de datas)
+
+═══════════════════════════════════════════════════════════════
+
+ESTRUTURA DO PROJETO:
+
+dashboard-conversao-legal-viver/
+├── backend/
+│   ├── src/
+│   │   ├── models/
+│   │   │   ├── Lead.ts
+│   │   │   ├── WhatsAppConnection.ts
+│   │   │   └── MessageTemplate.ts
+│   │   ├── services/
+│   │   │   ├── LeadService.ts
+│   │   │   ├── IACallService.ts
+│   │   │   ├── WhatsAppService.ts
+│   │   │   └── MarketingEnginesService.ts
+│   │   ├── controllers/
+│   │   │   ├── LeadController.ts
+│   │   │   └── WebhookController.ts
+│   │   ├── queues/
+│   │   │   └── index.ts
+│   │   ├── workers/
+│   │   │   └── index.ts
+│   │   ├── routes/
+│   │   │   └── index.ts
+│   │   ├── config/
+│   │   │   └── database.ts
+│   │   ├── utils/
+│   │   │   └── logger.ts
+│   │   └── server.ts
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── .env.example
+│   └── README.md
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── LeadCard.tsx
+│   │   │   ├── LeadDetails.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   └── Timeline.tsx
+│   │   ├── pages/
+│   │   │   ├── Home.tsx
+│   │   │   ├── LeadList.tsx
+│   │   │   └── Analytics.tsx
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   ├── hooks/
+│   │   │   └── useLeads.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   └── App.tsx
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   └── index.html
+├── docker-compose.yml
+├── README.md
+└── DOCUMENTACAO.md
+
+═══════════════════════════════════════════════════════════════
+
+MODELOS DE DADOS:
+
+1. Lead (MongoDB Model):
+   - lead_id: string (UUID)
+   - cpf: string
+   - nome_completo: string
+   - telefones: Array<{
+       numero: string
+       prioridade: number (1=LP, 2+=enriquecido)
+       origem: string
+       inapto: boolean
+       motivo_inapto: string
+     }>
+   - emails: Array<{ email: string, origem: string }>
+   - proposta: {
+       id_proposta: string
+       data_criacao_proposta: Date
+       valor_liberado: number
+       prazo_meses: number
+       valor_parcela: number
+       banco: string
+       link_assinatura_atual: string
+       data_geracao_link_assinatura: Date
+       status_proposta: enum (PENDENTE, PAGO, PENDENCIA, EXPIRADA)
+     }
+   - status_atual: enum (ROXO, AZUL, VERDE, VERMELHO, LARANJA, BRANCO, REPROVADO)
+   - historico_status: Array<{ status, timestamp, motivo }>
+   - historico_interacoes: Array<{ tipo, dados, timestamp, custo }>
+   - custos: { custo_aquisicao, custo_motores, custo_total, detalhamento }
+   - atribuicao_whatsapp: { conexao_id, numero_wa, status_conexao, novas_conversas_hoje, data_atribuicao }
+   - agendamentos: Array<{ data_hora, motivo, operador, concluido }>
+   - observacoes: Array<{ texto, operador, timestamp }>
+   - humano_obrigatorio: boolean
+   - pausar_automacoes: boolean
+   - origem: string
+   - data_entrada_assinatura: Date
+
+2. WhatsAppConnection:
+   - conexao_id: string
+   - numero_wa: string
+   - nome_conexao: string
+   - status: enum (ATIVA, BANIDA, OFFLINE, MANUTENCAO)
+   - novas_conversas_hoje: number
+   - limite_diario: number (default 25)
+   - ultima_mensagem: Date
+   - metadata: object
+
+3. MessageTemplate:
+   - contexto: enum (WHATSAPP_INICIAL, WHATSAPP_CUTUCADA_MENOS_3_DIAS, etc)
+   - titulo: string
+   - conteudo: string
+   - variaveis: string[] (ex: ['nome_completo', 'valor_liberado'])
+   - ativo: boolean
+   - prioridade: number (1-10)
+
+═══════════════════════════════════════════════════════════════
+
+SISTEMA DE CORES (STATUS):
+
+🟣 ROXO = PAGO
+   - Gatilho: Consulta retornou PAGO
+   - Ação: Encerra ciclo, envia parabéns (RCS+Email+IA), pausa automações
+
+🔵 AZUL = PENDÊNCIA
+   - Gatilho: Assinou + retornou pendência
+   - Ação: Requer correção humana com SLA alto
+
+🟢 VERDE = INTERAGIU
+   - Gatilho: Digitou 1, clicou em link, mensagem com dúvida (não reclamação)
+   - Ação: Demonstrou interesse, continua fluxo
+
+🔴 VERMELHO = RECLAMAÇÃO
+   - Gatilho: Detectou reclamação/raiva via palavras-chave ou sentimento negativo
+   - Ação: Pausa automações, humano_obrigatorio=true, prioridade máxima
+
+🟠 LARANJA = SEM INTERAÇÃO
+   - Gatilho: Completou ciclo automático sem nenhuma interação
+   - Ação: BLOQUEIA WhatsApp manual do operador
+
+⚪ BRANCO = EXPIRADA
+   - Gatilho: Proposta/link expirou (30+ dias)
+   - Ação: Encerra ciclo, registra motivo
+
+═══════════════════════════════════════════════════════════════
+
+REGRAS IA DE LIGAÇÃO (IACallService.ts):
+
+PRIORIZAÇÃO:
+1. Lista A (prioridade=1, informado na LP)
+2. Lista B (prioridade>=2, enriquecidos)
+
+TENTATIVAS:
+- Máximo: 6 tentativas por lead
+- Janelas: 08:00, 12:00, 19:00
+- Distribui tentativas entre números e janelas
+
+RESULTADOS E AÇÕES:
+
+A) NÃO_ATENDEU ou DERRUBOU (número válido):
+   - Religar em 5 minutos (mesmo número)
+   - Se falhar: religar em 10 minutos
+   - Se falhar: religar em 20 minutos
+   - Após sequência: próximo número ou próxima janela
+
+B) CAIXA_POSTAL, INVALIDO, INEXISTENTE:
+   - Marcar telefone como inapto (permanente)
+   - Pular imediatamente para próximo telefone
+   - NÃO aplicar religação 5/10/20
+
+C) ATENDEU_DIGITOU_1:
+   - Encerrar tentativas pendentes de IA
+   - Status → VERDE (se não PAGO/PENDÊNCIA)
+   - Disparar webhook WhatsApp com trigger_source=IA_LIGACAO_DIGITOU_1
+
+D) ATENDEU_SEM_ACAO:
+   - Registrar ATENDEU_SEM_ACAO
+   - Aplicar religação 5/10/20 com prompts de reforço
+   - Continua cadência se persistir
+
+E) PEDIU_OPERADOR:
+   - humano_obrigatorio = true
+   - Criar alerta prioritário
+   - Pausar automações (opcional)
+
+TEMPLATES RANDÔMICOS:
+- Biblioteca de variações por janela (JANELA_1, JANELA_2, JANELA_3)
+- Seleção ponderada por prioridade
+- Substituição de variáveis: {{nome_completo}}, {{valor_liberado}}, etc
+
+CUSTOS:
+- Registrar custo por tentativa (env: COST_IA_CALL)
+
+═══════════════════════════════════════════════════════════════
+
+REGRAS WHATSAPP (WhatsAppService.ts):
+
+POOL DE CONEXÕES:
+- 20 conexões ativas
+- Limite: 25 novas conversas/dia por conexão
+- Reset automático diário às 00:00 (CRON job)
+
+ATRIBUIÇÃO (ROLETA):
+
+1. NOVO (lead sem conversa):
+   - Buscar próxima conexão disponível (status=ATIVA, conversas<25)
+   - Ordenar por: menor número de conversas, última mensagem mais antiga
+   - Atribuir e incrementar contador
+   - Tipo: "NOVO"
+
+2. RETENÇÃO (lead já tem conversa):
+   - Verificar status da conexão antiga
+   - Se ATIVA: manter mesma conexão
+   - Tipo: "RETENCAO"
+
+3. FAILOVER (conexão banida/offline):
+   - Se conexão antiga está BANIDA ou OFFLINE
+   - Reatribuir via roleta (próxima disponível)
+   - Tipo: "FAILOVER"
+
+REGRA DO LINK (3 DIAS):
+
+- Calcular: dias desde data_geracao_link_assinatura
+- SE < 3 dias:
+    * NÃO reenviar link
+    * Enviar cutucada: "sua proposta está acima, ficou alguma dúvida?"
+- SE >= 3 dias:
+    * Gerar novo link via API
+    * Atualizar data_geracao_link_assinatura
+    * Enviar link novo
+
+MENSAGENS RANDÔMICAS:
+- Contextos: WHATSAPP_INICIAL, WHATSAPP_CUTUCADA_MENOS_3_DIAS, WHATSAPP_CUTUCADA_MAIS_3_DIAS, WHATSAPP_REATIVACAO
+- Seleção aleatória ponderada
+- Substituição de variáveis
+
+CUSTOS:
+- Registrar custo por mensagem (env: COST_WHATSAPP_MESSAGE)
+
+═══════════════════════════════════════════════════════════════
+
+MOTORES MARKETING (MarketingEnginesService.ts):
+
+RCS:
+- Enviar com link rastreável único: link?utm_source=rcs&lead_id=X
+- Eventos: ENVIADO, ENTREGUE, ABERTO, CLICADO
+- Custo: env COST_RCS
+
+SMS (fallback do RCS):
+- Enviar com link rastreável: link?utm_source=sms&lead_id=X
+- Eventos: ENVIADO, ENTREGUE, CLICADO
+- Custo: env COST_SMS
+
+EMAIL:
+- Contextos: EMAIL_INICIAL, EMAIL_PARABENS_PAGO
+- Link rastreável: link?utm_source=email&lead_id=X
+- Eventos: ENVIADO, ENTREGUE, ABERTO, CLICADO
+- Custo: env COST_EMAIL
+
+WEBHOOKS:
+- Ao receber evento CLICADO de qualquer motor:
+    * Atualizar status → VERDE
+    * Disparar WhatsAppService.processarGatilho(leadId, 'RCS_CLIQUE' ou 'SMS_CLIQUE' ou 'EMAIL_CLIQUE')
+
+═══════════════════════════════════════════════════════════════
+
+API REST (Express Routes):
+
+LEADS:
+POST   /api/leads/importar                # Importa lead etapa Assinatura
+GET    /api/leads                         # Lista com filtros (status, origem, humano_obrigatorio, data_inicio, data_fim, pagina, limite)
+GET    /api/leads/:leadId                 # Busca específico
+PUT    /api/leads/:leadId/status          # Atualiza status manualmente
+POST   /api/leads/:leadId/agendamento     # Adiciona agendamento
+POST   /api/leads/:leadId/observacao      # Adiciona observação
+GET    /api/leads/estatisticas            # Estatísticas por cor
+GET    /api/leads/humano-obrigatorio      # Leads que requerem atenção
+
+WEBHOOKS:
+POST   /api/webhooks/conversion-trigger   # Gatilho digitou 1 / clique
+       Body: { lead_id, cpf, trigger_source }
+
+POST   /api/webhooks/rcs                  # Eventos RCS
+       Body: { lead_id, campanha_id, event_type, timestamp }
+
+POST   /api/webhooks/sms                  # Eventos SMS
+       Body: { lead_id, campanha_id, event_type, timestamp }
+
+POST   /api/webhooks/email                # Eventos Email
+       Body: { lead_id, campanha_id, event_type, timestamp }
+
+POST   /api/webhooks/proposal-status      # Status proposta
+       Body: { lead_id, cpf, id_proposta, status, motivo }
+
+HEALTH:
+GET    /api/health                        # Health check
+
+═══════════════════════════════════════════════════════════════
+
+FILAS BULLMQ (backend/src/queues/index.ts):
+
+1. lead-import       # Importação de leads
+2. ia-call           # Processamento ligações IA
+3. whatsapp          # Envio mensagens WhatsApp
+4. rcs               # Envio RCS
+5. sms               # Envio SMS
+6. email             # Envio email
+7. proposal-check    # Verificação expiração (CRON 6h)
+
+Configuração:
+- Connection: IORedis
+- Retry: 3 tentativas com backoff exponencial
+- Remove on complete: 1000 jobs, 24h
+- Remove on fail: 7 dias
+
+═══════════════════════════════════════════════════════════════
+
+WORKERS (backend/src/workers/index.ts):
+
+1. iaCallWorker       # Processa fila ia-call
+2. whatsappWorker     # Processa fila whatsapp + reset diário
+3. rcsWorker          # Processa fila rcs
+4. smsWorker          # Processa fila sms
+5. emailWorker        # Processa fila email
+6. proposalCheckWorker # Processa fila proposal-check (CRON)
+
+JOBS RECORRENTES:
+- Reset WhatsApp: CRON '0 0 * * *' (00:00 diário)
+- Check Proposals: CRON '0 */6 * * *' (a cada 6h)
+
+═══════════════════════════════════════════════════════════════
+
+OPERAÇÃO HUMANA - BLOQUEIOS:
+
+STATUS VERDE:
+- Permitido: Ligação manual
+- Recomendação: Preferir ligação, evitar WhatsApp manual
+
+STATUS VERMELHO:
+- Prioridade: MÁXIMA
+- Ação: Pausar automações para não piorar experiência
+- Permitido: Toda intervenção humana
+
+STATUS LARANJA:
+- BLOQUEIO TOTAL: WhatsApp manual (UI e API bloqueiam)
+- Permitido: Ver histórico, agendar, observações
+- Razão: Lead não interagiu, spam pode piorar
+
+STATUS AZUL:
+- Ação: Correção de pendência obrigatória
+- SLA: Alto
+- Após correção: Reconsultar até resolver
+
+═══════════════════════════════════════════════════════════════
+
+GESTÃO DE CUSTOS:
+
+Por Lead:
+- custo_aquisicao: Custo do canal origem (Meta, TikTok, URA, WhatsApp)
+- custo_motores: Soma de todas as ações (IA, RCS, SMS, Email, WhatsApp)
+- custo_total: custo_aquisicao + custo_motores
+- detalhamento: Array com { motor, acao, custo, timestamp }
+
+Subdashboards Analíticos:
+1. Custos: Custo por conversão, custo por motor, ROI por canal
+2. Motores: Taxa sucesso IA, entregabilidade, cliques, conversões
+3. Tempo: Tempo por cor, funil Assinatura→Cores→Encerramento
+4. Qualidade: Taxa reclamação, expiração, pendência
+
+═══════════════════════════════════════════════════════════════
+
+ENCERRAMENTO DE CICLO:
+
+PAGO (ROXO):
+- Receber evento via webhook/consulta
+- Status → ROXO
+- Pausar automações conversão
+- Disparar: RCS parabéns + Email parabéns + IA ligação parabéns
+- Mover para histórico/filtro
+
+PENDÊNCIA (AZUL):
+- Receber evento pendência pós-assinatura
+- Status → AZUL
+- Registrar motivo
+- Gerar alerta correção
+- Operador executa correção
+- Sistema reconsulta até resolver
+- Se resolver: ROXO | Se expirar: BRANCO
+
+EXPIRADA (BRANCO):
+- Detectar expiração link/proposta (30+ dias)
+- Status → BRANCO
+- Encerrar ciclo automático
+- Registrar motivo e evidências
+
+═══════════════════════════════════════════════════════════════
+
+FLUXO REPROVADOS (separado):
+
+DETECÇÃO:
+- Status = REPROVADO (do sistema original)
+
+AÇÃO:
+1. Enviar RCS (ou SMS fallback): "Infelizmente sua proposta foi reprovada. Faremos nova análise em 30 dias."
+2. Criar agendamento interno: reavaliação em 30 dias
+3. Após 30 dias: nova análise
+   - Se aprovado: entra no dash conversão normalmente
+   - Se reprovado: repetir ciclo
+
+═══════════════════════════════════════════════════════════════
+
+FRONTEND (React + TypeScript):
+
+COMPONENTES PRINCIPAIS:
+
+1. Dashboard.tsx (Kanban por cor):
+   - Colunas: ROXO, AZUL, VERDE, VERMELHO, LARANJA, BRANCO
+   - Contadores por status
+   - Cards arrastáveis
+   - Filtros: origem, data, operador
+
+2. LeadCard.tsx:
+   - Nome, CPF, status (cor)
+   - Valor proposta, parcelas
+   - Última interação (relativa)
+   - Custos totais
+   - Botão "Ver Detalhes"
+
+3. LeadDetails.tsx (Modal/Página):
+   - Dados completos lead
+   - Proposta detalhada
+   - Contatos (telefones prioridade, emails)
+   - Linha do tempo completa (Timeline.tsx)
+   - Custos detalhados
+   - Ações: Ligar, Agendar, Observação
+   - Bloqueios por status (LARANJA não tem WhatsApp)
+
+4. Timeline.tsx:
+   - Eventos ordenados cronologicamente
+   - Ícones por tipo (telefone, email, WhatsApp, status)
+   - Detalhes expandíveis
+   - Custos por ação
+
+5. Analytics.tsx:
+   - Gráficos Recharts: Pizza (por cor), Barras (conversões), Linha (tempo médio)
+   - Cards KPI: taxa conversão, custo médio, ROI
+   - Filtros temporais
+
+HOOKS:
+- useLeads: React Query para buscar/atualizar leads
+- useDashboard: Estatísticas e filtros
+- useWebSocket: Updates real-time (opcional)
+
+SERVICES:
+- api.ts: Axios configurado com base URL, interceptors, tipos
+
+STYLING:
+- TailwindCSS com cores customizadas para status
+- Responsivo (mobile-first)
+- Dark mode (opcional)
+
+═══════════════════════════════════════════════════════════════
+
+CONFIGURAÇÕES AMBIENTE (.env.example):
+
+# MongoDB
+MONGODB_URI=mongodb://localhost:27017/dashboard_conversao
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+# Server
+PORT=3000
+NODE_ENV=development
+
+# WhatsApp
+WHATSAPP_CONNECTIONS_COUNT=20
+WHATSAPP_DAILY_LIMIT_PER_CONNECTION=25
+WHATSAPP_API_URL=https://api.whatsapp.com
+WHATSAPP_API_KEY=
+
+# External APIs
+IA_CALL_API_URL=https://api.ia-ligacao.com
+IA_CALL_API_KEY=
+
+RCS_API_URL=https://api.rcs.com
+RCS_API_KEY=
+
+SMS_API_URL=https://api.sms.com
+SMS_API_KEY=
+
+EMAIL_API_URL=https://api.email.com
+EMAIL_API_KEY=
+
+# Dashboard Original
+ORIGINAL_DASHBOARD_URL=https://dash-clt.legalivv.com.br
+ORIGINAL_DASHBOARD_API_KEY=
+
+# Costs (centavos)
+COST_IA_CALL=50
+COST_RCS=15
+COST_SMS=10
+COST_EMAIL=5
+COST_WHATSAPP_MESSAGE=5
+
+═══════════════════════════════════════════════════════════════
+
+REQUISITOS NÃO-FUNCIONAIS:
+
+CÓDIGO:
+- TypeScript estrito (strict: true)
+- ESLint + Prettier configurados
+- Comentários inline explicativos
+- Tratamento de erros robusto
+- Validação de entrada (Joi)
+
+SEGURANÇA:
+- Rate limiting (100 req/15min)
+- Helmet.js headers
+- CORS configurado
+- Variáveis ambiente (.env)
+- Sanitização de dados
+
+PERFORMANCE:
+- Índices MongoDB otimizados
+- Cache Redis quando aplicável
+- Paginação em listagens
+- Lazy loading frontend
+
+LOGS:
+- Winston logger
+- Níveis: error, warn, info, debug
+- Arquivos separados: error.log, combined.log
+- Logs estruturados (JSON)
+
+MONITORAMENTO:
+- Health check endpoint
+- Métricas por motor
+- Rastreabilidade total
+
+═══════════════════════════════════════════════════════════════
+
+INSTRUÇÕES ESPECIAIS:
+
+1. PRIORIZE FIDELIDADE À ESPECIFICAÇÃO
+   - Cada regra listada acima DEVE ser implementada exatamente
+   - Não simplifique nem omita regras
+
+2. CÓDIGO PROFISSIONAL
+   - Use padrões de design (Service, Controller, Repository)
+   - Separação de responsabilidades
+   - DRY (Don't Repeat Yourself)
+   - Clean Code principles
+
+3. DOCUMENTAÇÃO
+   - README.md completo em cada pasta
+   - Comentários inline em lógicas complexas
+   - JSDoc para funções públicas
+   - Exemplos de uso nas APIs
+
+4. TESTES (opcional mas recomendado)
+   - Jest para backend
+   - React Testing Library para frontend
+   - Cobertura mínima 70%
+
+5. DOCKER (opcional)
+   - docker-compose.yml para MongoDB + Redis
+   - Dockerfile para backend e frontend
+
+═══════════════════════════════════════════════════════════════
+
+ENTREGÁVEIS:
+
+✅ Estrutura de diretórios completa
+✅ Todos os arquivos TypeScript com código funcional
+✅ package.json com todas as dependências
+✅ tsconfig.json configurado
+✅ .env.example com todas as variáveis
+✅ README.md principal com instruções de instalação
+✅ README.md em backend/ e frontend/
+✅ DOCUMENTACAO.md técnica completa
+
+═══════════════════════════════════════════════════════════════
+
+IMPORTANTE:
+
+Este é um sistema de conversão de leads de alta complexidade.
+Cada regra foi especificada após análise detalhada.
+O sucesso do sistema depende da fidelidade à implementação.
+
+IMPLEMENTE TUDO COM MÁXIMA QUALIDADE E ATENÇÃO AOS DETALHES!
+
+═══════════════════════════════════════════════════════════════
