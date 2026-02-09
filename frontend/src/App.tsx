@@ -330,9 +330,13 @@ function App() {
         className="mt-12 py-6 fade-in"
         style={{ backgroundColor: BRAND.purple, animationDelay: '0.3s' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center" style={{ color: BRAND.purpleMid }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center" style={{ color: BRAND.purpleMid }}>
+          <img
+            src={supabase.storage.from('img').getPublicUrl('logo.webp').data.publicUrl}
+            alt="Logo"
+            className="h-10 w-auto object-contain mb-3"
+          />
           <p>Dashboard de Conversão - Legal é Viver &copy; 2026</p>
-          <p className="text-sm mt-1">Sistema de Orquestração de Motores de Marketing</p>
         </div>
       </footer>
     </div>
