@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { FiUser, FiPhone, FiMail, FiDollarSign, FiClock, FiTrendingUp, FiX, FiCalendar, FiFileText, FiLink } from 'react-icons/fi';
+import { FiUser, FiPhone, FiMail, FiDollarSign, FiClock, FiTrendingUp, FiX, FiCalendar, FiFileText, FiLink, FiLogOut } from 'react-icons/fi';
 import { supabase } from './lib/supabase';
+import Login from './Login';
 import './App.css';
+import type { Session } from '@supabase/supabase-js';
 
 // ============================================================================
 // CORES DA MARCA
@@ -103,16 +105,34 @@ const STATUS_CONFIG: Record<StatusCor, { bg: string; text: string; border: strin
 // ============================================================================
 
 function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<StatusCor | 'TODOS'>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
-  // Carregar leads ao montar
+  // Verificar sessão ao montar
   useEffect(() => {
-    carregarLeads();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Carregar leads quando autenticado
+  useEffect(() => {
+    if (session) {
+      carregarLeads();
+    }
+  }, [session]);
 
   const carregarLeads = async () => {
     setLoading(true);
@@ -188,6 +208,23 @@ function App() {
     branco: allLeads.filter(l => l.statusAtual === 'BRANCO').length,
   };
 
+  // Tela de carregamento da autenticação
+  if (authLoading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: `linear-gradient(135deg, ${BRAND.purple} 0%, #1a0538 100%)` }}
+      >
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-white border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // Tela de login
+  if (!session) {
+    return <Login onLogin={() => {}} />;
+  }
+
   return (
     <div
       className="min-h-screen"
@@ -220,6 +257,16 @@ function App() {
                 <p className="text-sm" style={{ color: BRAND.purpleMid }}>Total de Leads</p>
                 <p className="text-2xl font-bold text-white">{stats.total}</p>
               </div>
+              <button
+                onClick={async () => { await supabase.auth.signOut(); setSession(null); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-95"
+                style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: BRAND.white }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)')}
+              >
+                <FiLogOut />
+                Sair
+              </button>
             </div>
           </div>
         </div>
