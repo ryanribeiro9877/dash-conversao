@@ -1,8 +1,12 @@
-/* Animações customizadas */
-@keyframes fadeIn {
+/* ============================================================
+   ANIMAÇÕES
+   ============================================================ */
+
+/* Fade in de baixo para cima */
+@keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -10,11 +14,77 @@
   }
 }
 
-.fade-in {
-  animation: fadeIn 0.3s ease-in-out;
+/* Fade in simples */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-/* Scrollbar customizada */
+/* Slide in da esquerda */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Pulse suave para contadores */
+@keyframes countPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* Spinner */
+@keyframes spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   CLASSES DE ANIMAÇÃO
+   ============================================================ */
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out both;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.4s ease-out both;
+}
+
+.animate-count-pulse {
+  animation: countPulse 0.35s ease-in-out;
+}
+
+/* Stagger delay para listas de cards */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.10s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.20s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.30s; }
+
+/* ============================================================
+   TRANSIÇÕES GLOBAIS
+   ============================================================ */
+
+.transition-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   SCROLLBAR CUSTOMIZADA
+   ============================================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -27,13 +97,17 @@
 ::-webkit-scrollbar-thumb {
   background: #888;
   border-radius: 4px;
+  transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
-/* Loading spinner */
+/* ============================================================
+   LOADING SPINNER
+   ============================================================ */
+
 .spinner {
   border: 3px solid #f3f3f3;
   border-top: 3px solid #3b82f6;
@@ -43,12 +117,10 @@
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+/* ============================================================
+   STATUS BADGES
+   ============================================================ */
 
-/* Status badges */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -56,7 +128,7 @@
   border-radius: 9999px;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .status-badge:hover {
